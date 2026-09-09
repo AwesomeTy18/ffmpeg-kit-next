@@ -1,0 +1,51 @@
+name: Watch Upstream Releases
+
+# Polls arthenica/ffmpeg-kit-next for new releases and triggers an SPM binary
+# build when this fork does not yet have a matching published release.
+
+on:
+  schedule:
+    # Twice daily (UTC)
+    - cron: "17 6,18 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  check-and-dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Find newest upstream release without a matching SPM release here
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          UPSTREAM: arthenica/ffmpeg-kit-next
+        run: |
+          set -euo pipefail
+          UPSTREAM_TAG="$(gh api "repos/${UPSTREAM}/releases/latest" --jq .tag_name)"
+          echo "Upstream latest: ${UPSTREAM_TAG}"
+
+          if gh api "repos/${{ github.repository }}/releases/tags/${UPSTREAM_TAG}" >/dev/null 2>&1; then
+            ASSETS="$(gh api "repos/${{ github.repository }}/releases/tags/${UPSTREAM_TAG}" --jq '.assets | length')"
+            if [[ "${ASSETS}" -gt 0 ]]; then
+              echo "Already published ${UPSTREAM_TAG} with ${ASSETS} assets — nothing to do."
+              echo "should_build=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+
+          echo "Missing SPM release assets for ${UPSTREAM_TAG}"
+          echo "should_build=true" >> "$GITHUB_OUTPUT"
+          echo "tag=${UPSTREAM_TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Trigger SPM build
+        if: steps.check.outputs.should_build == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run build-spm-release.yml \
+            --repo "${{ github.repository }}" \
+            -f "tag=${{ steps.check.outputs.tag }}"
+          echo "Dispatched build-spm-release for ${{ steps.check.outputs.tag }}"
