@@ -1,0 +1,133 @@
+name: Build and Publish SPM Release
+
+# Builds LGPL iOS+macOS XCFrameworks from an upstream ffmpeg-kit-next tag,
+# publishes zip assets to a GitHub Release, and updates root Package.swift
+# so this fork can be used as a Swift Package Manager dependency.
+#
+# Notes:
+# - Apple FFmpeg builds are slow (often many hours). Requires macos runners
+#   with Xcode 26+ and Nix. Free-tier Actions minutes may be insufficient.
+# - Publishing force-updates the version tag (e.g. v9.0.0) on this fork so
+#   SPM resolves Package.swift from that tag. Upstream source remains at
+#   arthenica/ffmpeg-kit-next.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Upstream / SPM release tag (e.g. v9.0.0)"
+        required: true
+        type: string
+        default: "v9.0.0"
+  repository_dispatch:
+    types: [spm-build]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: spm-release-${{ github.event.inputs.tag || github.event.client_payload.tag || 'latest' }}
+  cancel-in-progress: false
+
+jobs:
+  build-and-publish:
+    runs-on: macos-latest
+    timeout-minutes: 720
+    env:
+      TAG: ${{ github.event.inputs.tag || github.event.client_payload.tag }}
+      UPSTREAM: arthenica/ffmpeg-kit-next
+    steps:
+      - name: Validate tag
+        run: |
+          if [[ -z "${TAG}" ]]; then
+            echo "error: tag is required" >&2
+            exit 1
+          fi
+          echo "Building SPM release for ${TAG}"
+
+      - name: Checkout packaging scripts (this fork)
+        uses: actions/checkout@v4
+        with:
+          path: packaging
+          ref: ${{ github.ref }}
+
+      - name: Checkout upstream source at tag
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.UPSTREAM }}
+          ref: ${{ env.TAG }}
+          path: src
+          fetch-depth: 1
+
+      - name: Select latest Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@v16
+
+      - name: Nix store cache
+        uses: DeterminateSystems/magic-nix-cache-action@main
+        continue-on-error: true
+
+      - name: Copy SPM helper scripts into source tree
+        run: |
+          mkdir -p src/scripts/spm
+          cp -R packaging/scripts/spm/. src/scripts/spm/
+          chmod +x src/scripts/spm/*.sh
+
+      - name: Build Apple XCFrameworks (LGPL)
+        working-directory: src
+        run: ./scripts/spm/build-apple-spm.sh
+
+      - name: Generate remote Package.swift and zip XCFrameworks
+        id: package
+        run: |
+          UMBRELLA="${GITHUB_WORKSPACE}/src/prebuilt/umbrella-apple-xcframework"
+          OUT="${GITHUB_WORKSPACE}/Package.swift"
+          ./packaging/scripts/spm/generate-remote-package-swift.sh \
+            "${UMBRELLA}" \
+            "${{ github.repository }}" \
+            "${TAG}" \
+            "${OUT}"
+          echo "umbrella=${UMBRELLA}" >> "$GITHUB_OUTPUT"
+          ls -lh "${UMBRELLA}"/*.xcframework.zip
+
+      - name: Commit Package.swift and retarget version tag
+        working-directory: packaging
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          cp "${GITHUB_WORKSPACE}/Package.swift" ./Package.swift
+          git add Package.swift
+          if git diff --cached --quiet; then
+            echo "Package.swift unchanged"
+          else
+            git commit -m "chore(spm): update Package.swift for ${TAG}"
+          fi
+          # Force-move the version tag to this SPM commit so SPM resolves correctly
+          git tag -f "${TAG}"
+          git push origin "HEAD:${{ github.ref_name }}"
+          git push origin "refs/tags/${TAG}" --force
+
+      - name: Publish GitHub Release with XCFramework zips
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG }}
+          name: FFmpegKitNext SPM ${{ env.TAG }} (LGPL)
+          body: |
+            Swift Package Manager binaries for [${{ env.TAG }}](https://github.com/${{ env.UPSTREAM }}/releases/tag/${{ env.TAG }}).
+
+            **License:** LGPL 3.0 (built without `--enable-gpl`).
+
+            **Add in Xcode / Package.swift:**
+            ```swift
+            .package(url: "https://github.com/${{ github.repository }}", from: "9.0.0")
+            ```
+            (Use the numeric version matching this tag; product `ffmpeg-kit`.)
+
+            Source: https://github.com/${{ env.UPSTREAM }}
+          files: src/prebuilt/umbrella-apple-xcframework/*.xcframework.zip
+          fail_on_unmatched_files: true
+          make_latest: true
