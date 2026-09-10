@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Generate a root Package.swift that uses remote binaryTarget URLs + checksums.
 # Usage:
-#   generate-remote-package-swift.sh <prebuilt-dir> <github-owner/repo> <tag> <out-file>
+#   bash generate-remote-package-swift.sh <prebuilt-dir> <github-owner/repo> <tag> <out-file>
+# Compatible with macOS Bash 3.2 (no associative arrays).
 set -euo pipefail
 
 PREBUILT_DIR="${1:?prebuilt dir}"
@@ -9,14 +10,41 @@ REPO="${2:?owner/repo}"
 TAG="${3:?tag}"
 OUT_FILE="${4:?output Package.swift path}"
 
-LIBS=(libavcodec libavdevice libavfilter libavformat libavutil libswresample libswscale ffmpegkit)
-
 if [[ ! -d "${PREBUILT_DIR}" ]]; then
   echo "error: prebuilt dir not found: ${PREBUILT_DIR}" >&2
   exit 1
 fi
 
-declare -A CHECKSUMS=()
+# Prefer the known LGPL set; fall back to whatever *.xcframework dirs exist.
+EXPECTED="libavcodec libavdevice libavfilter libavformat libavutil libswresample libswscale ffmpegkit"
+LIBS=()
+for LIB in ${EXPECTED}; do
+  if [[ -d "${PREBUILT_DIR}/${LIB}.xcframework" ]]; then
+    LIBS+=("${LIB}")
+  fi
+done
+
+if [[ ${#LIBS[@]} -eq 0 ]]; then
+  FOUND="$(find "${PREBUILT_DIR}" -maxdepth 1 -type d -name '*.xcframework' | sort || true)"
+  if [[ -n "${FOUND}" ]]; then
+    while IFS= read -r path; do
+      [[ -z "${path}" ]] && continue
+      LIBS+=("$(basename "${path}" .xcframework)")
+    done <<< "${FOUND}"
+  fi
+fi
+
+if [[ ${#LIBS[@]} -eq 0 ]]; then
+  echo "error: no .xcframework directories under ${PREBUILT_DIR}" >&2
+  ls -la "${PREBUILT_DIR}" >&2 || true
+  exit 1
+fi
+
+echo "Packaging frameworks: ${LIBS[*]}"
+
+CHECKSUM_FILE="$(mktemp)"
+trap 'rm -f "${CHECKSUM_FILE}"' EXIT
+
 for LIB in "${LIBS[@]}"; do
   XCF="${PREBUILT_DIR}/${LIB}.xcframework"
   ZIP="${PREBUILT_DIR}/${LIB}.xcframework.zip"
@@ -30,10 +58,17 @@ for LIB in "${LIBS[@]}"; do
     cd "${PREBUILT_DIR}"
     ditto -c -k --sequesterRsrc --keepParent "${LIB}.xcframework" "${LIB}.xcframework.zip"
   )
-  CHECKSUMS["${LIB}"]="$(swift package compute-checksum "${ZIP}")"
-  echo "checksum ${LIB}=${CHECKSUMS[${LIB}]}"
+  SUM="$(swift package compute-checksum "${ZIP}")"
+  printf '%s|%s\n' "${LIB}" "${SUM}" >> "${CHECKSUM_FILE}"
+  echo "checksum ${LIB}=${SUM}"
 done
 
+checksum_for() {
+  local lib="$1"
+  awk -F'|' -v lib="${lib}" '$1 == lib { print $2; exit }' "${CHECKSUM_FILE}"
+}
+
+TMP="${OUT_FILE}.tmp"
 {
   cat <<'HEADER'
 // swift-tools-version:5.7
@@ -46,7 +81,7 @@ HEADER
   echo ""
   echo "let frameworks: [String: String] = ["
   for LIB in "${LIBS[@]}"; do
-    echo "    \"${LIB}\": \"${CHECKSUMS[${LIB}]}\","
+    echo "    \"${LIB}\": \"$(checksum_for "${LIB}")\","
   done
   cat <<'BODY'
 ]
@@ -71,10 +106,10 @@ let package = Package(
     targets: frameworks.map { xcframework($0) }
 )
 BODY
-} > "${OUT_FILE}.tmp"
+} > "${TMP}"
 
-# Inject owner/repo into the URL template
-sed "s|REPO_PLACEHOLDER|${REPO}|g" "${OUT_FILE}.tmp" > "${OUT_FILE}"
-rm -f "${OUT_FILE}.tmp"
+# Inject owner/repo into the URL template (portable sed)
+sed "s|REPO_PLACEHOLDER|${REPO}|g" "${TMP}" > "${OUT_FILE}"
+rm -f "${TMP}"
 
 echo "Wrote ${OUT_FILE}"

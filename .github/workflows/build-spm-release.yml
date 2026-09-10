@@ -43,7 +43,10 @@ jobs:
             echo "error: tag is required" >&2
             exit 1
           fi
-          echo "Building SPM release for ${TAG}"
+          # SPM from: wants a numeric version without a leading "v"
+          SPM_VERSION="${TAG#v}"
+          echo "Building SPM release for ${TAG} (SPM from: \"${SPM_VERSION}\")"
+          echo "SPM_VERSION=${SPM_VERSION}" >> "$GITHUB_ENV"
 
       - name: Checkout packaging scripts (this fork)
         uses: actions/checkout@v4
@@ -77,11 +80,12 @@ jobs:
         run: |
           mkdir -p src/scripts/spm
           cp packaging/scripts/spm/*.sh src/scripts/spm/
-          chmod +x src/scripts/spm/*.sh
+          # push_files / API commits often omit the git executable bit
+          chmod +x packaging/scripts/spm/*.sh src/scripts/spm/*.sh
 
       - name: Build Apple XCFrameworks (LGPL)
         working-directory: src
-        run: ./scripts/spm/build-apple-spm.sh
+        run: bash ./scripts/spm/build-apple-spm.sh
 
       - name: Upload build.log on failure
         if: failure()
@@ -94,25 +98,34 @@ jobs:
       - name: Generate remote Package.swift and zip XCFrameworks
         id: package
         run: |
-          UMBRELLA="$(find "${GITHUB_WORKSPACE}/src/prebuilt" -maxdepth 1 -type d -name 'umbrella-apple-xcframework*' | head -n 1)"
+          set -euo pipefail
+          UMBRELLA="$(find "${GITHUB_WORKSPACE}/src/prebuilt" -maxdepth 1 -type d -name 'umbrella-apple-xcframework*' | head -n 1 || true)"
           if [[ -z "${UMBRELLA}" ]]; then
             echo "error: umbrella directory not found" >&2
             ls -la "${GITHUB_WORKSPACE}/src/prebuilt" || true
             exit 1
           fi
           echo "Using umbrella: ${UMBRELLA}"
+          ls -la "${UMBRELLA}"
           OUT="${GITHUB_WORKSPACE}/Package.swift"
-          ./packaging/scripts/spm/generate-remote-package-swift.sh \
+          # Invoke via bash so a missing +x bit cannot fail the job again
+          bash packaging/scripts/spm/generate-remote-package-swift.sh \
             "${UMBRELLA}" \
             "${{ github.repository }}" \
             "${TAG}" \
             "${OUT}"
+          # Stage zips in a stable path for softprops/action-gh-release
+          mkdir -p "${GITHUB_WORKSPACE}/dist"
+          cp -f "${UMBRELLA}"/*.xcframework.zip "${GITHUB_WORKSPACE}/dist/"
           echo "umbrella=${UMBRELLA}" >> "$GITHUB_OUTPUT"
-          ls -lh "${UMBRELLA}"/*.xcframework.zip
+          ls -lh "${GITHUB_WORKSPACE}/dist"/*.xcframework.zip
+          echo "---- Package.swift ----"
+          cat "${OUT}"
 
       - name: Commit Package.swift and retarget version tag
         working-directory: packaging
         run: |
+          set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           cp "${GITHUB_WORKSPACE}/Package.swift" ./Package.swift
@@ -140,11 +153,12 @@ jobs:
 
             **Add in Xcode / Package.swift:**
             ```swift
-            .package(url: "https://github.com/${{ github.repository }}", from: "9.0.0")
+            .package(url: "https://github.com/${{ github.repository }}", from: "${{ env.SPM_VERSION }}")
             ```
             Product: `ffmpeg-kit`.
 
             Source: https://github.com/${{ env.UPSTREAM }}
-          files: src/prebuilt/umbrella-apple-xcframework*/*.xcframework.zip
+          files: |
+            dist/*.xcframework.zip
           fail_on_unmatched_files: true
           make_latest: true
