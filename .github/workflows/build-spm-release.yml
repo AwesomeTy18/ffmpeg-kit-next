@@ -10,6 +10,8 @@ name: Build and Publish SPM Release
 # - Publishing force-updates the version tag (e.g. v9.0.0) on this fork so
 #   SPM resolves Package.swift from that tag. Upstream source remains at
 #   arthenica/ffmpeg-kit-next.
+# - workflow_dispatch allows up to 25 inputs (tag + 24 library checkboxes).
+#   Auto-triggered repository_dispatch runs use the default (no optional libs).
 
 on:
   workflow_dispatch:
@@ -19,6 +21,102 @@ on:
         required: true
         type: string
         default: "v9.0.0"
+      libass:
+        description: "libass (ASS/SSA subtitles)"
+        type: boolean
+        default: false
+      freetype:
+        description: "freetype (fonts)"
+        type: boolean
+        default: false
+      fribidi:
+        description: "fribidi (bidi text)"
+        type: boolean
+        default: false
+      fontconfig:
+        description: "fontconfig"
+        type: boolean
+        default: false
+      harfbuzz:
+        description: "harfbuzz (text shaping)"
+        type: boolean
+        default: false
+      dav1d:
+        description: "dav1d (AV1 decode)"
+        type: boolean
+        default: false
+      libaom:
+        description: "libaom (AV1)"
+        type: boolean
+        default: false
+      libsvtav1:
+        description: "libsvtav1 (AV1 encode)"
+        type: boolean
+        default: false
+      libvpx:
+        description: "libvpx (VP8/VP9)"
+        type: boolean
+        default: false
+      openh264:
+        description: "openh264"
+        type: boolean
+        default: false
+      kvazaar:
+        description: "kvazaar (HEVC encode)"
+        type: boolean
+        default: false
+      lame:
+        description: "lame (MP3 encode)"
+        type: boolean
+        default: false
+      opus:
+        description: "opus"
+        type: boolean
+        default: false
+      libvorbis:
+        description: "libvorbis"
+        type: boolean
+        default: false
+      speex:
+        description: "speex"
+        type: boolean
+        default: false
+      libwebp:
+        description: "libwebp"
+        type: boolean
+        default: false
+      openssl:
+        description: "openssl (TLS/HTTPS)"
+        type: boolean
+        default: false
+      srt:
+        description: "srt (Secure Reliable Transport)"
+        type: boolean
+        default: false
+      libxml2:
+        description: "libxml2"
+        type: boolean
+        default: false
+      soxr:
+        description: "soxr (resampling)"
+        type: boolean
+        default: false
+      snappy:
+        description: "snappy"
+        type: boolean
+        default: false
+      zimg:
+        description: "zimg"
+        type: boolean
+        default: false
+      apple_videotoolbox:
+        description: "Apple VideoToolbox (iOS + macOS)"
+        type: boolean
+        default: false
+      apple_audiotoolbox:
+        description: "Apple AudioToolbox (iOS + macOS)"
+        type: boolean
+        default: false
   repository_dispatch:
     types: [spm-build]
 
@@ -47,6 +145,158 @@ jobs:
           SPM_VERSION="${TAG#v}"
           echo "Building SPM release for ${TAG} (SPM from: \"${SPM_VERSION}\")"
           echo "SPM_VERSION=${SPM_VERSION}" >> "$GITHUB_ENV"
+
+      - name: Resolve optional external libraries
+        run: |
+          set -euo pipefail
+          COMMON_FLAGS=()
+          IOS_FLAGS=()
+          MACOS_FLAGS=()
+          LABELS=()
+
+          is_true() { [[ "${1:-}" == "true" ]]; }
+
+          if is_true "${{ github.event.inputs.libass }}"; then
+            COMMON_FLAGS+=("--enable-lib-libass")
+            LABELS+=("libass")
+          fi
+
+          if is_true "${{ github.event.inputs.freetype }}"; then
+            COMMON_FLAGS+=("--enable-lib-freetype")
+            LABELS+=("freetype")
+          fi
+
+          if is_true "${{ github.event.inputs.fribidi }}"; then
+            COMMON_FLAGS+=("--enable-lib-fribidi")
+            LABELS+=("fribidi")
+          fi
+
+          if is_true "${{ github.event.inputs.fontconfig }}"; then
+            COMMON_FLAGS+=("--enable-lib-fontconfig")
+            LABELS+=("fontconfig")
+          fi
+
+          if is_true "${{ github.event.inputs.harfbuzz }}"; then
+            COMMON_FLAGS+=("--enable-lib-harfbuzz")
+            LABELS+=("harfbuzz")
+          fi
+
+          if is_true "${{ github.event.inputs.dav1d }}"; then
+            COMMON_FLAGS+=("--enable-lib-dav1d")
+            LABELS+=("dav1d")
+          fi
+
+          if is_true "${{ github.event.inputs.libaom }}"; then
+            COMMON_FLAGS+=("--enable-lib-libaom")
+            LABELS+=("libaom")
+          fi
+
+          if is_true "${{ github.event.inputs.libsvtav1 }}"; then
+            COMMON_FLAGS+=("--enable-lib-libsvtav1")
+            LABELS+=("libsvtav1")
+          fi
+
+          if is_true "${{ github.event.inputs.libvpx }}"; then
+            COMMON_FLAGS+=("--enable-lib-libvpx")
+            LABELS+=("libvpx")
+          fi
+
+          if is_true "${{ github.event.inputs.openh264 }}"; then
+            COMMON_FLAGS+=("--enable-lib-openh264")
+            LABELS+=("openh264")
+          fi
+
+          if is_true "${{ github.event.inputs.kvazaar }}"; then
+            COMMON_FLAGS+=("--enable-lib-kvazaar")
+            LABELS+=("kvazaar")
+          fi
+
+          if is_true "${{ github.event.inputs.lame }}"; then
+            COMMON_FLAGS+=("--enable-lib-lame")
+            LABELS+=("lame")
+          fi
+
+          if is_true "${{ github.event.inputs.opus }}"; then
+            COMMON_FLAGS+=("--enable-lib-opus")
+            LABELS+=("opus")
+          fi
+
+          if is_true "${{ github.event.inputs.libvorbis }}"; then
+            COMMON_FLAGS+=("--enable-lib-libvorbis")
+            LABELS+=("libvorbis")
+          fi
+
+          if is_true "${{ github.event.inputs.speex }}"; then
+            COMMON_FLAGS+=("--enable-lib-speex")
+            LABELS+=("speex")
+          fi
+
+          if is_true "${{ github.event.inputs.libwebp }}"; then
+            COMMON_FLAGS+=("--enable-lib-libwebp")
+            LABELS+=("libwebp")
+          fi
+
+          if is_true "${{ github.event.inputs.openssl }}"; then
+            COMMON_FLAGS+=("--enable-lib-openssl")
+            LABELS+=("openssl")
+          fi
+
+          if is_true "${{ github.event.inputs.srt }}"; then
+            COMMON_FLAGS+=("--enable-lib-srt")
+            LABELS+=("srt")
+          fi
+
+          if is_true "${{ github.event.inputs.libxml2 }}"; then
+            COMMON_FLAGS+=("--enable-lib-libxml2")
+            LABELS+=("libxml2")
+          fi
+
+          if is_true "${{ github.event.inputs.soxr }}"; then
+            COMMON_FLAGS+=("--enable-lib-soxr")
+            LABELS+=("soxr")
+          fi
+
+          if is_true "${{ github.event.inputs.snappy }}"; then
+            COMMON_FLAGS+=("--enable-lib-snappy")
+            LABELS+=("snappy")
+          fi
+
+          if is_true "${{ github.event.inputs.zimg }}"; then
+            COMMON_FLAGS+=("--enable-lib-zimg")
+            LABELS+=("zimg")
+          fi
+
+          if is_true "${{ github.event.inputs.apple_videotoolbox }}"; then
+            IOS_FLAGS+=("--enable-lib-ios-videotoolbox")
+            MACOS_FLAGS+=("--enable-lib-macos-videotoolbox")
+            LABELS+=("VideoToolbox (iOS+macOS)")
+          fi
+
+          if is_true "${{ github.event.inputs.apple_audiotoolbox }}"; then
+            IOS_FLAGS+=("--enable-lib-ios-audiotoolbox")
+            MACOS_FLAGS+=("--enable-lib-macos-audiotoolbox")
+            LABELS+=("AudioToolbox (iOS+macOS)")
+          fi
+
+          EXTRA_LIB_FLAGS="${COMMON_FLAGS[*]-}"
+          IOS_LIB_FLAGS="${IOS_FLAGS[*]-}"
+          MACOS_LIB_FLAGS="${MACOS_FLAGS[*]-}"
+          if [[ ${#LABELS[@]} -eq 0 ]]; then
+            ENABLED_LIBS_HUMAN="none (default LGPL minimal build)"
+          else
+            ENABLED_LIBS_HUMAN="$(IFS=', '; echo "${LABELS[*]}")"
+          fi
+          {
+            echo "EXTRA_LIB_FLAGS=${EXTRA_LIB_FLAGS}"
+            echo "IOS_LIB_FLAGS=${IOS_LIB_FLAGS}"
+            echo "MACOS_LIB_FLAGS=${MACOS_LIB_FLAGS}"
+            echo "ENABLED_LIBS_HUMAN=${ENABLED_LIBS_HUMAN}"
+          } >> "$GITHUB_ENV"
+          echo "Optional libraries: ${ENABLED_LIBS_HUMAN}"
+          echo "common flags: ${EXTRA_LIB_FLAGS:-<none>}"
+          echo "ios flags: ${IOS_LIB_FLAGS:-<none>}"
+          echo "macos flags: ${MACOS_LIB_FLAGS:-<none>}"
+
 
       - name: Checkout packaging scripts (this fork)
         uses: actions/checkout@v4
@@ -85,6 +335,10 @@ jobs:
 
       - name: Build Apple XCFrameworks (LGPL)
         working-directory: src
+        env:
+          EXTRA_LIB_FLAGS: ${{ env.EXTRA_LIB_FLAGS }}
+          IOS_LIB_FLAGS: ${{ env.IOS_LIB_FLAGS }}
+          MACOS_LIB_FLAGS: ${{ env.MACOS_LIB_FLAGS }}
         run: bash ./scripts/spm/build-apple-spm.sh
 
       - name: Upload build.log on failure
@@ -150,6 +404,8 @@ jobs:
             **License:** LGPL 3.0 (built without `--enable-gpl`).
 
             **Platforms:** iOS + macOS (tvOS/visionOS not included in this automation).
+
+            **Optional external libraries:** ${{ env.ENABLED_LIBS_HUMAN }}
 
             **Add in Xcode / Package.swift:**
             ```swift

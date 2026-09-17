@@ -27,6 +27,12 @@ Import the Objective-C module as `ffmpegkit` (same API as upstream Apple builds)
 
 You can also run **Actions → Build and Publish SPM Release → Run workflow** and enter a tag like `v9.0.0`.
 
+### Optional external libraries
+
+The manual **Run workflow** form includes separate checkboxes for useful **non-GPL** libraries (libass, dav1d, openssl, VideoToolbox, and others). Each checked library is passed through as the matching upstream `--enable-lib-…` flag. GitHub Actions allows at most 25 `workflow_dispatch` inputs, so the form is `tag` plus 24 library checkboxes — swap any out if you need a different set.
+
+Auto builds from `watch-upstream` / `repository_dispatch` keep the default (no optional libraries). The GitHub Release notes list which optional libraries were enabled for that run.
+
 ## First-time setup
 
 1. Confirm this repository is **public** (SPM cannot download private binary assets with normal HTTPS).
