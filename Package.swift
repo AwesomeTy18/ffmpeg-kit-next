@@ -3,17 +3,17 @@
 // Do not edit by hand — rerun the SPM release workflow instead.
 import PackageDescription
 
-let release = "v9.0.0"
+let release = "v9.0.1"
 
 let frameworks: [String: String] = [
-    "libavcodec": "825b89e4c2bda599f2b9bebc43775e3ce5c737f75d9061048a3488299a06d2d7",
-    "libavdevice": "f7a387e0f3e810016a3338cec5c7be0788954824024fb0c51ab5251f850573f8",
-    "libavfilter": "af3f536e07be02084a1d8f5fc95a84bbd6ded2d2cddb1ff42d680f1826d8575d",
-    "libavformat": "b1ea888220e4be4d82e7e0045093c1e106a16a9a33a78871c72f6a31135fdcdf",
-    "libavutil": "34fca3a0ad9760482f5976d655c821f9038b568e79e100743dd4871119b5523c",
-    "libswresample": "7f76bcf9178bd64f64f3df6d5182cb95f556b9b41e09078ac4321671d0942270",
-    "libswscale": "07b9105e20d7acb9ca48c9abcfc1532ccc42ddd9ed25e13febbdb0ad287b00a7",
-    "ffmpegkit": "3ccc23c0acba6f6229e5098aeab94ce1c9699c98171e2c38cd86780c42720c05",
+    "libavcodec": "67a2fdc1573104b931eac48429148912a4663631953db86a65cd1407ba15142a",
+    "libavdevice": "e7867caa041483dc2f86f347e4f61c229da3a15c348134f955cd0c4d2db355b9",
+    "libavfilter": "44a55ea1c7aa3530e0a6a9181ae110b301850d3c11488a14608ece42c5339b4a",
+    "libavformat": "b8cfd9bcc733a5e8db5eee7d1dcb807cf0700861705b879a7a6798be868c6ae1",
+    "libavutil": "d8e2a720249002c8e4803961bb95301c53ff1fb1fd44f61689d3493cacfae36e",
+    "libswresample": "856cd10dd33cc9e3207e91aae87ddfc4126cebf80e4196335b5d75f64954e505",
+    "libswscale": "d8860cd47aa363e517ebedf81be0cd9b828881be950dbe988bbf67a0815b7565",
+    "ffmpegkit": "0d856a96c7f0d3f9ef01478b999b5df5f69a87a315085a013265524681128e2d",
 ]
 
 func xcframework(_ entry: Dictionary<String, String>.Element) -> Target {
